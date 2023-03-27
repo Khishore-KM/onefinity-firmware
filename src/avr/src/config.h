@@ -133,6 +133,11 @@ enum {
 #define DRV8711_TORQUE            DRV8711_TORQUE_SMPLTH_200
 // NOTE, Datasheet suggests 850ns DTIME with the optional gate resistor
 // installed.  See page 30 section 8.1.2 of DRV8711 datasheet.
+/*In high current or high voltage applications, the low side predriver fault may assert due to noise in the system. In
+this application, TI recommends placing a 47 to 120-Ω resistor in series with the low side output and the gate of
+the low side FET. TI also recommends setting the dead time to 850 ns when adding a series resistor.
+*/
+
 #define DRV8711_CTRL             (DRV8711_CTRL_ISGAIN_5 | \
                                   DRV8711_CTRL_DTIME_850)
 

@@ -332,7 +332,7 @@ static void _start_write() {
   //
   //     char time = 11-bits / baud * 3.5
   //
-  // At 9600 baud the minimum delay is 4.01ms.  At 19200 it's 2.005ms.  All
+  // At 9600 baud the minimum delay is 4.01ms.  At , 19200 it's 2.005ms.  All
   // supported higher baud rates require the 1.75ms minimum delay.  We round up
   // and add 1ms to ensure the delay is never less than the required minimum.
   if (state.last_read &&

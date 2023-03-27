@@ -7,6 +7,11 @@
 #include <stdint.h>
 
 
+/*
+this file basically works on the ADC conventions enabling and making operations in it 
+it basically enables two input analog channels
+
+*/
 typedef struct {
   uint8_t pin;
   uint16_t value;

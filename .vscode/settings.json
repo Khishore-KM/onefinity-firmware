@@ -27,5 +27,12 @@
         "rpi-share/cbang"
     ],
     "git.autofetch": false,
-    "git.confirmSync": false
+    "git.confirmSync": false,
+    "files.associations": {
+        "*.def": "c",
+        "ctype.h": "c",
+        "io.h": "c",
+        "spindle.h": "c",
+        "stdbool.h": "c"
+    }
 }

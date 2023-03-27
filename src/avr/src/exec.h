@@ -22,6 +22,10 @@ float exec_get_velocity();
 void exec_set_acceleration(float a);
 float exec_get_acceleration();
 void exec_set_jerk(float j);
+float exec_get_feed();
+void  exec_set_feed(float F);
+void exec_update_feed();
+
 
 void exec_set_cb(exec_cb_t cb);
 

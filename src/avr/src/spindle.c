@@ -27,9 +27,11 @@ static struct {
   float min_rpm;
   float max_rpm;
   float inv_max_rpm;
+  
 
   bool dynamic_power;
   float inv_feed;
+  ////**  float feed;  **////
 
   spindle_type_t next_type;
 
@@ -162,12 +164,13 @@ void spindle_load_power_updates(power_update_t updates[], float minD,
 }
 
 
-// Called from hi-priority stepper interrupt
+// Called from high-priority stepper interrupt
 void spindle_update(const power_update_t &update) {pwm_update(update);}
 void spindle_update_speed() {_set_speed(spindle.speed);}
+void _update_inv_feed(){}
 
 
-// Called from lo-priority stepper interrupt
+// Called from low-priority stepper interrupt
 void spindle_idle() {
   if (spindle.sync_speed.dist != -1) {
     spindle.sync_speed.dist = -1; // Mark done
@@ -263,6 +266,23 @@ void set_inverse_feed(float iF) {
     spindle_update_speed();
   }
 }
+
+/**************************************************\\
+
+
+float get_feed(){return spindle.feed;}
+
+
+void set_feed(float F){
+  if(spindle.feed != F){
+    spindle.feed = F;
+    spindle_update_speed();
+
+  }
+}
+
+
+******************************************************/
 
 
 // Command callbacks

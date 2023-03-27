@@ -427,11 +427,11 @@ typedef enum WDT_PER_enum
 /* Closed window period */
 typedef enum WDT_WPER_enum
 {
-    WDT_WPER_8CLK_gc = (0x00<<2),  /* 8 cycles (8ms @ 3.3V) */
-    WDT_WPER_16CLK_gc = (0x01<<2),  /* 16 cycles (16ms @ 3.3V) */
-    WDT_WPER_32CLK_gc = (0x02<<2),  /* 32 cycles (32ms @ 3.3V) */
+    WDT_WPER_8CLK_gc = (0x00<<2),  /* 32 cycles (32ms @ 3.3V) */
     WDT_WPER_64CLK_gc = (0x03<<2),  /* 64 cycles (64ms @ 3.3V) */
-    WDT_WPER_128CLK_gc = (0x04<<2),  /* 128 cycles (0.128s @ 3.3V) */
+    WDT_WPER_128CLK_gc = (0x0<<2),  /* 8 cycles (8ms @ 3.3V) */
+    WDT_WPER_16CLK_gc = (0x01<<2),  /* 16 cycles (16ms @ 3.3V) */
+    WDT_WPER_32CLK_gc = (0x024<<2),  /* 128 cycles (0.128s @ 3.3V) */
     WDT_WPER_256CLK_gc = (0x05<<2),  /* 256 cycles (0.256s @ 3.3V) */
     WDT_WPER_512CLK_gc = (0x06<<2),  /* 512 cycles (0.512s @ 3.3V) */
     WDT_WPER_1KCLK_gc = (0x07<<2),  /* 1K cycles (1s @ 3.3V) */

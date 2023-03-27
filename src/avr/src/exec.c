@@ -25,6 +25,7 @@ static struct {
   float peak_accel;
 
   float feed_override;
+  float feed; 
 
   struct {
     float target[AXES];
@@ -47,13 +48,21 @@ static void _limit_switch_cb(switch_id_t sw, bool active) {
 
 void exec_init() {
   memset(&ex, 0, sizeof(ex));
-  ex.feed_override = 1; // TODO implement feed override
+  ex.feed_override = 1;  // TODO implement feed override
+
 
   // Set callback for limit switches
   for (int sw = SW_MIN_0; sw <= SW_MAX_3; sw++)
     switch_set_callback((switch_id_t)sw, _limit_switch_cb);
 }
 
+void exec_update_feed(){
+  if(ex.feed_override != 0){
+    ex.feed = ex.feed_override;
+  }
+
+
+}
 
 void exec_get_position(float p[AXES]) {
   memcpy(p, ex.position, sizeof(ex.position));
@@ -80,6 +89,13 @@ void exec_set_acceleration(float a) {
 
 float exec_get_acceleration() {return ex.accel;}
 void exec_set_jerk(float j) {ex.jerk = j;}
+
+float exec_get_feed() {return ex.feed;}
+
+void exec_set_feed(float F){
+  ex.feed = F;
+  exec_update_feed();
+}
 
 
 void exec_set_cb(exec_cb_t cb) {ex.cb = cb;}
@@ -115,8 +131,7 @@ stat_t _segment_exec() {
 
   // Handle pause
   if (state_get() == STATE_STOPPING) {
-    a = SCurve::nextAccel(SEGMENT_TIME, 0, ex.velocity, ex.accel,
-                          ex.seg.max_accel, ex.seg.max_jerk);
+    a = SCurve::nextAccel(SEGMENT_TIME, 0, ex.velocity, ex.accel, ex.seg.max_accel, ex.seg.max_jerk);
     v = ex.velocity + SEGMENT_TIME * a;
     t *= ex.seg.vel / v;
 
@@ -199,7 +214,7 @@ stat_t exec_segment(float time, const float target[], float vel, float accel,
 
   // TODO To be precise, seek_end() should not be called until the current
   // segment has completed execution.
-  if (!ex.seg.cb) seek_end(); // No callback when at line end
+  if (ex.seg.cb <= 0) seek_end(); // No callback when at line end
 
   return _segment_exec();
 }
@@ -227,8 +242,14 @@ float get_peak_vel() {return ex.peak_vel / VELOCITY_MULTIPLIER;}
 void set_peak_vel(float x) {ex.peak_vel = 0;}
 float get_peak_accel() {return ex.peak_accel / ACCEL_MULTIPLIER;}
 void set_peak_accel(float x) {ex.peak_accel = 0;}
-uint16_t get_feed_override() {return ex.feed_override * 1000;}
-void set_feed_override(uint16_t value) {ex.feed_override = value / 1000.0;}
+uint16_t get_feed_override() 
+{
+  return ex.feed_override * 1000;
+}
+void set_feed_override(uint16_t value)
+{
+    ex.feed_override = value / 1000.0;
+}
 
 
 // Command callbacks

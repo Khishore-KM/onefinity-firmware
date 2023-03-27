@@ -52,6 +52,7 @@ class I2C(object):
 
             elif block is not None:
                 if isinstance(block, str): block = list(map(ord, block))
+                self.get_log().info(block)
                 self.i2c_bus.write_i2c_block_data(addr, cmd, block)
 
             else:
