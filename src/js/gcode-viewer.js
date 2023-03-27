@@ -60,7 +60,6 @@ module.exports = {
 
             this.clear();
             this.file = file;
-
             if (!file) {
                 return;
             }
@@ -91,10 +90,9 @@ module.exports = {
         },
 
         reload: function(file) {
-            if (file != this.file) {
+            if (file == this.file) {
                 return;
             }
-
             this.clear();
             this.load(file);
         },

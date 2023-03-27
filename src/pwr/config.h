@@ -1,3 +1,30 @@
+/******************************************************************************\
+
+                 This file is part of the Buildbotics firmware.
+
+                   Copyright (c) 2015 - 2018, Buildbotics LLC
+                              All rights reserved.
+
+      This file ("the software") is free software: you can redistribute it
+      and/or modify it under the terms of the GNU General Public License,
+       version 2 as published by the Free Software Foundation. You should
+       have received a copy of the GNU General Public License, version 2
+      along with the software. If not, see <http://www.gnu.org/licenses/>.
+
+      The software is distributed in the hope that it will be useful, but
+           WITHOUT ANY WARRANTY; without even the implied warranty of
+       MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+                Lesser General Public License for more details.
+
+        You should have received a copy of the GNU Lesser General Public
+                 License along with the software.  If not, see
+                        <http://www.gnu.org/licenses/>.
+
+                 For information regarding this software email:
+                   "Joseph Coffland" <joseph@buildbotics.com>
+
+\******************************************************************************/
+
 #pragma once
 
 #include "pins.h"
@@ -76,7 +103,7 @@ enum {
 #define VOLTAGE_REF_R2           1000
 #define CURRENT_REF_R2           137
 #define CURRENT_REF_MUL (100.0 * 2700 / CURRENT_REF_R2) // 2700 from datasheet
-#define CAP_PRECHARGE_PERIOD	  2000 // ms
+#define CAP_PRECHARGE_PERIOD	  50 // ms
 
 #define REG_SCALE                100
 #define AVG_SCALE                3

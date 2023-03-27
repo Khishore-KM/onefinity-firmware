@@ -1,41 +1,66 @@
-from tornado import gen
-from tornado.web import HTTPError
-import bbctrl
-import datetime
 import os
-import re
-import socket
-import sockjs.tornado
-import subprocess
+import json
 import tornado
+import sockjs.tornado
+import datetime
+import subprocess
+import socket
+from tornado.web import HTTPError
+from tornado import gen
+import re
+import bbctrl
 from urllib.request import urlopen
+import iw_parse
 
 
 def call_get_output(cmd):
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+    p = subprocess.Popen(cmd, stdout = subprocess.PIPE)
     s = p.communicate()[0].decode('utf-8')
-    if p.returncode:
-        raise HTTPError(400, 'Command failed')
+    if p.returncode: raise HTTPError(400, 'Command failed')
     return s
 
 
+def get_username():
+    return call_get_output(['getent', 'passwd', '1001']).split(':')[0]
+
+
+def set_username(username):
+    if subprocess.call(['usermod', '-l', username, get_username()]):
+        raise HTTPError(400, 'Failed to set username to "%s"' % username)
+
+
+def check_password(password):
+    # Get current password
+    s = call_get_output(['getent', 'shadow', get_username()])
+    current = s.split(':')[1].split('$')
+
+    # Check password type
+    if len(current) < 2 or current[1] != '1':
+        raise HTTPError(401, "Password invalid")
+
+    # Check current password
+    cmd = ['openssl', 'passwd', '-salt', current[2], '-1', password]
+    s = call_get_output(cmd).strip()
+
+    if s.split('$') != current: raise HTTPError(401, 'Wrong password')
+
+
+
 class RebootHandler(bbctrl.APIHandler):
-
     def put_ok(self):
+        self.get_ctrl().lcd.goodbye('Rebooting...')
         subprocess.Popen(['reboot'])
-
-
+        
 class ShutdownHandler(bbctrl.APIHandler):
-
     def put_ok(self):
-        subprocess.Popen(['shutdown', '-h', 'now'])
+        subprocess.Popen(['shutdown','-h','now'])
 
 
 class LogHandler(bbctrl.RequestHandler):
-
     def get(self):
         with open(self.get_ctrl().log.get_path(), 'r') as f:
             self.write(f.read())
+
 
     def set_default_headers(self):
         fmt = socket.gethostname() + '-%Y%m%d.log'
@@ -45,24 +70,20 @@ class LogHandler(bbctrl.RequestHandler):
 
 
 class MessageAckHandler(bbctrl.APIHandler):
-
     def put_ok(self, id):
         self.get_ctrl().state.ack_message(int(id))
 
 
 class BugReportHandler(bbctrl.RequestHandler):
-
     def get(self):
-        import tarfile
-        import io
+        import tarfile, io
 
         buf = io.BytesIO()
-        tar = tarfile.open(mode='w:bz2', fileobj=buf)
+        tar = tarfile.open(mode = 'w:bz2', fileobj = buf)
 
-        def check_add(path, arcname=None):
+        def check_add(path, arcname = None):
             if os.path.isfile(path):
-                if arcname is None:
-                    arcname = path
+                if arcname is None: arcname = path
                 tar.add(path, self.basename + '/' + arcname)
 
         def check_add_basename(path):
@@ -81,6 +102,7 @@ class BugReportHandler(bbctrl.RequestHandler):
 
         self.write(buf.getvalue())
 
+
     def set_default_headers(self):
         fmt = socket.gethostname() + '-%Y%m%d-%H%M%S'
         self.basename = datetime.datetime.now().strftime(fmt)
@@ -90,22 +112,77 @@ class BugReportHandler(bbctrl.RequestHandler):
 
 
 class HostnameHandler(bbctrl.APIHandler):
+    def get(self): self.write_json(socket.gethostname())
 
     def put(self):
         if self.get_ctrl().args.demo:
             raise HTTPError(400, 'Cannot set hostname in demo mode')
 
         if 'hostname' in self.json:
-            if subprocess.call(
-                ['/usr/local/bin/sethostname',
-                 self.json['hostname'].strip()]) == 0:
+            if subprocess.call(['/usr/local/bin/sethostname',
+                                self.json['hostname'].strip()]) == 0:
                 self.write_json('ok')
                 return
 
         raise HTTPError(400, 'Failed to set hostname')
 
 
+class NetworkData(bbctrl.APIHandler):
+
+    def get(self):
+        try:
+            ipAddresses = subprocess.check_output(
+                "ip -4 addr | grep -oE '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}'", shell=True).decode().split()
+            ipAddresses.remove("127.0.0.1")
+            regex = re.compile(r'/255$/')
+            filtered = [i for i in ipAddresses if not regex.match(i)]
+            ipAddresses = filtered[0]
+        except:
+            ipAddresses = "Not Connected"
+        try:
+            wifi = subprocess.check_output(
+                "sudo iw dev wlan0 info | grep ssid", shell=True).decode().split()
+            wifi.pop(0)
+            wifiName = " ".join(wifi)
+        except:
+            wifiName = "not connected"
+        self.write_json({
+            'ipAddresses': ipAddresses,
+            'wifi': wifiName
+        })
+
 class NetworkHandler(bbctrl.APIHandler):
+
+    def get(self):
+        try:
+            ipAddresses = subprocess.check_output(
+                "ip -4 addr | grep -oE '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}'", shell=True).decode().split()
+            ipAddresses.remove("127.0.0.1")
+            regex = re.compile(r'/255$/')
+            filtered = [i for i in ipAddresses if not regex.match(i)]
+            ipAddresses = filtered[0]
+
+        except:
+            ipAddresses = "Not Connected"
+
+        hostname = socket.gethostname()
+
+        try:
+            wifi = json.loads(call_get_output(['config-wifi', '-j']))
+        except:
+            wifi = {'enabled': False}
+
+        try:
+            lines = iw_parse.call_iwlist().decode("utf-8").split("\n")
+            wifi['networks'] = iw_parse.get_parsed_cells(lines)
+        except:
+            wifi['networks'] = []
+
+        self.write_json({
+            'ipAddresses': ipAddresses,
+            'hostname': hostname,
+            'wifi': wifi
+        })
 
     def put(self):
         if self.get_ctrl().args.demo:
@@ -115,7 +192,6 @@ class NetworkHandler(bbctrl.APIHandler):
             raise HTTPError(400, 'Payload is missing wifi config information')
 
         wifi = self.json['wifi']
-
         cmd = ['config-wifi', '-r']
 
         if not wifi['enabled']:
@@ -134,14 +210,47 @@ class NetworkHandler(bbctrl.APIHandler):
         raise HTTPError(400, 'Failed to configure wifi')
 
 
-class ConfigLoadHandler(bbctrl.APIHandler):
+class UsernameHandler(bbctrl.APIHandler):
+    def get(self): self.write_json(get_username())
 
+
+    def put_ok(self):
+        if self.get_ctrl().args.demo:
+            raise HTTPError(400, 'Cannot set username in demo mode')
+
+        if 'username' in self.json: set_username(self.json['username'])
+        else: raise HTTPError(400, 'Missing "username"')
+
+
+class PasswordHandler(bbctrl.APIHandler):
+    def put(self):
+        if self.get_ctrl().args.demo:
+            raise HTTPError(400, 'Cannot set password in demo mode')
+
+        if 'current' in self.json and 'password' in self.json:
+            check_password(self.json['current'])
+
+            # Set password
+            s = '%s:%s' % (get_username(), self.json['password'])
+            s = s.encode('utf-8')
+
+            p = subprocess.Popen(['chpasswd', '-c', 'MD5'],
+                                 stdin = subprocess.PIPE)
+            p.communicate(input = s)
+
+            if p.returncode == 0:
+                self.write_json('ok')
+                return
+
+        raise HTTPError(401, 'Failed to set password')
+
+
+class ConfigLoadHandler(bbctrl.APIHandler):
     def get(self):
         self.write_json(self.get_ctrl().config.load())
 
 
 class ConfigDownloadHandler(bbctrl.APIHandler):
-
     def set_default_headers(self):
         fmt = socket.gethostname() + '-%Y%m%d.json'
         filename = datetime.date.today().strftime(fmt)
@@ -150,25 +259,20 @@ class ConfigDownloadHandler(bbctrl.APIHandler):
                         'attachment; filename="%s"' % filename)
 
     def get(self):
-        self.write_json(self.get_ctrl().config.load(), pretty=True)
+        self.write_json(self.get_ctrl().config.load(), pretty = True)
 
 
 class ConfigSaveHandler(bbctrl.APIHandler):
-
-    def put_ok(self):
-        self.get_ctrl().config.save(self.json)
+    def put_ok(self): self.get_ctrl().config.save(self.json)
 
 
 class ConfigResetHandler(bbctrl.APIHandler):
-
-    def put_ok(self):
-        self.get_ctrl().config.reset()
+    def put_ok(self): self.get_ctrl().config.reset()
 
 
 class FirmwareUpdateHandler(bbctrl.APIHandler):
+    def prepare(self): pass
 
-    def prepare(self):
-        pass
 
     def put_ok(self):
         if not 'firmware' in self.request.files:
@@ -176,23 +280,22 @@ class FirmwareUpdateHandler(bbctrl.APIHandler):
 
         firmware = self.request.files['firmware'][0]
 
-        if not os.path.exists('firmware'):
-            os.mkdir('firmware')
+        if not os.path.exists('firmware'): os.mkdir('firmware')
 
         with open('firmware/update.tar.bz2', 'wb') as f:
             f.write(firmware['body'])
 
+        self.get_ctrl().lcd.goodbye('Upgrading firmware')
         subprocess.Popen(['/usr/local/bin/update-bbctrl'])
 
 
 class UpgradeHandler(bbctrl.APIHandler):
-
     def put_ok(self):
+        self.get_ctrl().lcd.goodbye('Upgrading firmware')
         subprocess.Popen(['/usr/local/bin/upgrade-bbctrl'])
 
 
 class PathHandler(bbctrl.APIHandler):
-
     @gen.coroutine
     def get(self, filename, dataType, *args):
         if not os.path.exists(self.get_upload(filename)):
@@ -202,23 +305,20 @@ class PathHandler(bbctrl.APIHandler):
         future = preplanner.get_plan(filename)
 
         try:
-            delta = datetime.timedelta(seconds=1)
+            delta = datetime.timedelta(seconds = 1)
             data = yield gen.with_timeout(delta, future)
 
         except gen.TimeoutError:
             progress = preplanner.get_plan_progress(filename)
-            self.write_json(dict(progress=progress))
+            self.write_json(dict(progress = progress))
             return
 
         try:
-            if data is None:
-                return
+            if data is None: return
             meta, positions, speeds = data
 
-            if dataType == '/positions':
-                data = positions
-            elif dataType == '/speeds':
-                data = speeds
+            if dataType == '/positions': data = positions
+            elif dataType == '/speeds': data = speeds
             else:
                 self.get_ctrl().state.set_bounds(meta['bounds'])
                 self.write_json(meta)
@@ -237,15 +337,12 @@ class PathHandler(bbctrl.APIHandler):
                 self.write(chunk)
                 yield self.flush()
 
-        except tornado.iostream.StreamClosedError as e:
-            pass
+        except tornado.iostream.StreamClosedError as e: pass
 
 
 class HomeHandler(bbctrl.APIHandler):
-
     def put_ok(self, axis, action, *args):
-        if axis is not None:
-            axis = ord(axis[1:2].lower())
+        if axis is not None: axis = ord(axis[1:2].lower())
 
         if action == '/set':
             if not 'position' in self.json:
@@ -253,93 +350,67 @@ class HomeHandler(bbctrl.APIHandler):
 
             self.get_ctrl().mach.home(axis, self.json['position'])
 
-        elif action == '/clear':
-            self.get_ctrl().mach.unhome(axis)
-        else:
-            self.get_ctrl().mach.home(axis)
+        elif action == '/clear': self.get_ctrl().mach.unhome(axis)
+        else: self.get_ctrl().mach.home(axis)
 
 
 class StartHandler(bbctrl.APIHandler):
-
-    def put_ok(self):
-        self.get_ctrl().mach.start()
+    def put_ok(self): self.get_ctrl().mach.start()
 
 
 class EStopHandler(bbctrl.APIHandler):
-
-    def put_ok(self):
-        self.get_ctrl().mach.estop()
+    def put_ok(self): self.get_ctrl().mach.estop()
 
 
 class ClearHandler(bbctrl.APIHandler):
-
-    def put_ok(self):
-        self.get_ctrl().mach.clear()
+    def put_ok(self): self.get_ctrl().mach.clear()
 
 
 class StopHandler(bbctrl.APIHandler):
-
-    def put_ok(self):
-        self.get_ctrl().mach.stop()
+    def put_ok(self): self.get_ctrl().mach.stop()
 
 
 class PauseHandler(bbctrl.APIHandler):
-
-    def put_ok(self):
-        self.get_ctrl().mach.pause()
+    def put_ok(self): self.get_ctrl().mach.pause()
 
 
 class UnpauseHandler(bbctrl.APIHandler):
-
-    def put_ok(self):
-        self.get_ctrl().mach.unpause()
+    def put_ok(self): self.get_ctrl().mach.unpause()
 
 
 class OptionalPauseHandler(bbctrl.APIHandler):
-
-    def put_ok(self):
-        self.get_ctrl().mach.optional_pause()
+    def put_ok(self): self.get_ctrl().mach.optional_pause()
 
 
 class StepHandler(bbctrl.APIHandler):
-
-    def put_ok(self):
-        self.get_ctrl().mach.step()
+    def put_ok(self): self.get_ctrl().mach.step()
 
 
 class PositionHandler(bbctrl.APIHandler):
-
     def put_ok(self, axis):
         self.get_ctrl().mach.set_position(axis, float(self.json['position']))
 
 
 class OverrideFeedHandler(bbctrl.APIHandler):
-
-    def put_ok(self, value):
-        self.get_ctrl().mach.override_feed(float(value))
+    def put_ok(self, value): self.get_ctrl().mach.override_feed(float(value))
 
 
 class OverrideSpeedHandler(bbctrl.APIHandler):
-
-    def put_ok(self, value):
-        self.get_ctrl().mach.override_speed(float(value))
+    def put_ok(self, value): self.get_ctrl().mach.override_speed(float(value))
 
 
 class ModbusReadHandler(bbctrl.APIHandler):
-
     def put_ok(self):
         self.get_ctrl().mach.modbus_read(int(self.json['address']))
 
 
 class ModbusWriteHandler(bbctrl.APIHandler):
-
     def put_ok(self):
         self.get_ctrl().mach.modbus_write(int(self.json['address']),
-                                          int(self.json['value']))
+                                    int(self.json['value']))
 
 
 class JogHandler(bbctrl.APIHandler):
-
     def put_ok(self):
         # Handle possible out of order jog command processing
         if 'ts' in self.json:
@@ -352,8 +423,7 @@ class JogHandler(bbctrl.APIHandler):
             last = self.app.last_jog.get(id, 0)
             self.app.last_jog[id] = ts
 
-            if ts < last:
-                return  # Out of order
+            if ts < last: return # Out of order
 
         self.get_ctrl().mach.jog(self.json)
 
@@ -364,8 +434,6 @@ transformationMatrixPattern = re.compile(
     re.DOTALL)
 matchIsTouchscreenPattern = re.compile(
     r'(\n)(\s+)(MatchIsTouchscreen.*?\n)(.*?EndSection)', re.DOTALL)
-
-
 class ScreenRotationHandler(bbctrl.APIHandler):
 
     @gen.coroutine
@@ -457,23 +525,23 @@ class RemoteDiagnosticsHandler(bbctrl.APIHandler):
                     'message': e.reason or "Unknown"
                 })
 
-
 # Base class for Web Socket connections
 class ClientConnection(object):
-
     def __init__(self, app):
         self.app = app
         self.count = 0
+
 
     def heartbeat(self):
         self.timer = self.app.ioloop.call_later(3, self.heartbeat)
         self.send({'heartbeat': self.count})
         self.count += 1
 
-    def send(self, msg):
-        raise HTTPError(400, 'Not implemented')
 
-    def on_open(self, id=None):
+    def send(self, msg): raise HTTPError(400, 'Not implemented')
+
+
+    def on_open(self, id = None):
         self.ctrl = self.app.get_ctrl(id)
 
         self.ctrl.state.add_listener(self.send)
@@ -482,6 +550,7 @@ class ClientConnection(object):
         self.heartbeat()
         self.app.opened(self.ctrl)
 
+
     def on_close(self):
         self.app.ioloop.remove_timeout(self.timer)
         self.ctrl.state.remove_listener(self.send)
@@ -489,17 +558,17 @@ class ClientConnection(object):
         self.is_open = False
         self.app.closed(self.ctrl)
 
+
     def on_message(self, data):
         self.ctrl.mach.mdi(data)
 
 
 # Used by CAMotics
 class WSConnection(ClientConnection, tornado.websocket.WebSocketHandler):
-
     def __init__(self, app, request, **kwargs):
         ClientConnection.__init__(self, app)
-        tornado.websocket.WebSocketHandler.__init__(self, app, request,
-                                                    **kwargs)
+        tornado.websocket.WebSocketHandler.__init__(
+            self, app, request, **kwargs)
 
     def send(self, msg):
         self.write_message(msg)
@@ -510,10 +579,10 @@ class WSConnection(ClientConnection, tornado.websocket.WebSocketHandler):
 
 # Used by Web frontend
 class SockJSConnection(ClientConnection, sockjs.tornado.SockJSConnection):
-
     def __init__(self, session):
         ClientConnection.__init__(self, session.server.app)
         sockjs.tornado.SockJSConnection.__init__(self, session)
+
 
     def send(self, msg):
         try:
@@ -521,30 +590,26 @@ class SockJSConnection(ClientConnection, sockjs.tornado.SockJSConnection):
         except:
             self.close()
 
+
     def on_open(self, info):
         cookie = info.get_cookie('client-id')
-        if cookie is None:
-            self.send(dict(sid=''))  # Trigger client reset
+        if cookie is None: self.send(dict(sid = '')) # Trigger client reset
         else:
             id = cookie.value
 
             ip = info.ip
-            if 'X-Real-IP' in info.headers:
-                ip = info.headers['X-Real-IP']
-            self.app.get_ctrl(id).log.get('Web').info('Connection from %s' %
-                                                      ip)
+            if 'X-Real-IP' in info.headers: ip = info.headers['X-Real-IP']
+            self.app.get_ctrl(id).log.get('Web').info('Connection from %s' % ip)
             super().on_open(id)
 
 
 class StaticFileHandler(tornado.web.StaticFileHandler):
-
     def set_extra_headers(self, path):
         self.set_header('Cache-Control',
                         'no-store, no-cache, must-revalidate, max-age=0')
 
 
 class Web(tornado.web.Application):
-
     def __init__(self, args, ioloop):
         self.args = args
         self.ioloop = ioloop
@@ -552,13 +617,10 @@ class Web(tornado.web.Application):
 
         # Init camera
         if not args.disable_camera:
-            if self.args.demo:
-                log = bbctrl.log.Log(args, ioloop, 'camera.log')
-            else:
-                log = self.get_ctrl().log
+            if self.args.demo: log = bbctrl.log.Log(args, ioloop, 'camera.log')
+            else: log = self.get_ctrl().log
             self.camera = bbctrl.Camera(ioloop, args, log)
-        else:
-            self.camera = None
+        else: self.camera = None
 
         # Init controller
         if not self.args.demo:
@@ -573,7 +635,10 @@ class Web(tornado.web.Application):
             (r'/api/reboot', RebootHandler),
             (r'/api/shutdown', ShutdownHandler),
             (r'/api/hostname', HostnameHandler),
+            (r'/api/wifi', NetworkData),
             (r'/api/network', NetworkHandler),
+            (r'/api/remote/username', UsernameHandler),
+            (r'/api/remote/password', PasswordHandler),
             (r'/api/config/load', ConfigLoadHandler),
             (r'/api/config/download', ConfigDownloadHandler),
             (r'/api/config/save', ConfigSaveHandler),
@@ -601,11 +666,10 @@ class Web(tornado.web.Application):
             (r'/api/screen-rotation', ScreenRotationHandler),
             (r'/api/time', TimeHandler),
             (r'/api/remote-diagnostics', RemoteDiagnosticsHandler),
-            (r'/(.*)', StaticFileHandler, {
-                'path': bbctrl.get_resource('http/'),
-                'default_filename': 'index.html'
-            }),
-        ]
+            (r'/(.*)', StaticFileHandler,
+             {'path': bbctrl.get_resource('http/'),
+              'default_filename': 'index.html'}),
+            ]
 
         router = sockjs.tornado.SockJSRouter(SockJSConnection, '/sockjs')
         router.app = self
@@ -613,41 +677,41 @@ class Web(tornado.web.Application):
         tornado.web.Application.__init__(self, router.urls + handlers)
 
         try:
-            self.listen(args.port, address=args.addr)
+            self.listen(args.port, address = args.addr)
 
         except Exception as e:
-            raise Exception('Failed to bind %s:%d: %s' %
-                            (args.addr, args.port, e))
+            raise Exception('Failed to bind %s:%d: %s' % (
+                args.addr, args.port, e))
 
         print('Listening on http://%s:%d/' % (args.addr, args.port))
 
-    def opened(self, ctrl):
-        ctrl.clear_timeout()
+
+    def opened(self, ctrl): ctrl.clear_timeout()
+
 
     def closed(self, ctrl):
         # Time out clients in demo mode
-        if self.args.demo:
-            ctrl.set_timeout(self._reap_ctrl, ctrl)
+        if self.args.demo: ctrl.set_timeout(self._reap_ctrl, ctrl)
+
 
     def _reap_ctrl(self, ctrl):
         ctrl.close()
         del self.ctrls[ctrl.id]
 
-    def get_ctrl(self, id=None):
-        if not id or not self.args.demo:
-            id = ''
+
+    def get_ctrl(self, id = None):
+        if not id or not self.args.demo: id = ''
 
         if not id in self.ctrls:
             ctrl = bbctrl.Ctrl(self.args, self.ioloop, id)
             self.ctrls[id] = ctrl
 
-        else:
-            ctrl = self.ctrls[id]
+        else: ctrl = self.ctrls[id]
 
         return ctrl
 
-    # Override default logger
 
+    # Override default logger
     def log_request(self, handler):
         log = self.get_ctrl(handler.get_cookie('client-id')).log.get('Web')
         log.info("%d %s", handler.get_status(), handler._request_summary())
