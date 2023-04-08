@@ -45,6 +45,7 @@ static const char indexed_code_fmt[] PROGMEM = "\"%c%s\":";
 
 
 // Ensure no var code is used more than once
+//
 enum {
 #define VAR(NAME, CODE, ...) var_code_##CODE,
 #include "vars.def"

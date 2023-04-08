@@ -173,8 +173,10 @@ static int _read_status(void) {
   if (fr & UART01x_FR_DSR) status |= TIOCM_LE;  // DSR (data set ready)
   if (cr & UART011_CR_DTR) status |= TIOCM_DTR; // DTR (data terminal ready)
   if (cr & UART011_CR_RTS) status |= TIOCM_RTS; // RTS (request to send)
-  // TODO What is TIOCM_ST - Secondary TXD (transmit)?
-  // TODO What is TIOCM_SR - Secondary RXD (receive)?
+  // TODO What is TIOCM_ST - Secondary TXD (transmit) enabling secondary port transmission.
+  // TODO What is TIOCM_SR - Secondary RXD (receive)? enabling secondary port reception.
+      status |=TIOCM_ST;
+      status |=TIOCM_ST;
   if (fr & UART01x_FR_CTS) status |= TIOCM_CTS; // CTS (clear to send)
   if (fr & UART01x_FR_DCD) status |= TIOCM_CD;  // DCD (data carrier detect)
   if (fr & UART011_FR_RI)  status |= TIOCM_RI;  // RI  (ring)

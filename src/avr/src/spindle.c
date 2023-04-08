@@ -82,6 +82,21 @@ static float _get_power()
   }
 }
 
+
+uint16_t get_speed_override() { return spindle.override * 1000; }
+
+void set_speed_override(uint16_t value)
+{
+  value *= 0.001;
+
+  if (spindle.override != value)
+  {
+    spindle.override = value;
+    spindle_update_speed();
+    spindle.speed = spindle.override;
+  }
+}
+
 static float _speed_to_power(float speed)
 {
   bool negative = speed < 0;
@@ -97,9 +112,12 @@ static float _speed_to_power(float speed)
   return (negative ^ spindle.reversed) ? -power : power;
 }
 
+void spindle_update_override(){ set_speed_override(spindle.override);}
+
 static void _set_speed(float speed)
 {
   spindle.speed = speed;
+  spindle_update_override();
 
   float power = _speed_to_power(speed);
 
@@ -229,28 +247,18 @@ void spindle_load_power_updates(power_update_t updates[], float minD,
   }
 }
 
-<<<<<<< HEAD
 
-// Called from high-priority stepper interrupt
-void spindle_update(const power_update_t &update) {pwm_update(update);}
-void spindle_update_speed() {_set_speed(spindle.speed);}
-void _update_inv_feed(){}
-
-
-// Called from low-priority stepper interrupt
-void spindle_idle() {
-  if (spindle.sync_speed.dist != -1) {
-=======
 // Called from hi-priority stepper interrupt
 void spindle_update(const power_update_t &update) { pwm_update(update); }
 void spindle_update_speed() { _set_speed(spindle.speed); }
+
+
 
 // Called from lo-priority stepper interrupt
 void spindle_idle()
 {
   if (spindle.sync_speed.dist != -1)
   {
->>>>>>> 2baae7965a96795988ceadf4079aa76a1642040f
     spindle.sync_speed.dist = -1; // Mark done
     spindle.speed = spindle.sync_speed.speed;
 
@@ -316,19 +324,6 @@ uint16_t get_spindle_status()
   }
 }
 
-uint16_t get_speed_override() { return spindle.override * 1000; }
-
-void set_speed_override(uint16_t value)
-{
-  value *= 0.001;
-
-  if (spindle.override != value)
-  {
-    spindle.override = value;
-    spindle_update_speed();
-  }
-}
-
 bool get_dynamic_power() { return spindle.dynamic_power; }
 
 void set_dynamic_power(bool enable)
@@ -351,27 +346,19 @@ void set_inverse_feed(float iF)
   }
 }
 
-<<<<<<< HEAD
-/**************************************************\\
+uint16_t get_inverse_feed_override(){return spindle.override*1000; }
+void set_inverse_feed_override(uint16_t value){
 
+  value *= 0.001;
 
-float get_feed(){return spindle.feed;}
-
-
-void set_feed(float F){
-  if(spindle.feed != F){
-    spindle.feed = F;
-    spindle_update_speed();
-
+  if(spindle.override != value){
+    spindle.override = value;
   }
+  spindle.inv_feed = spindle.override;
 }
 
+void spindle_update_inverse_feed_override(){set_inverse_feed_override(spindle.override);}
 
-******************************************************/
-
-
-=======
->>>>>>> 2baae7965a96795988ceadf4079aa76a1642040f
 // Command callbacks
 stat_t command_sync_speed(char *cmd)
 {
